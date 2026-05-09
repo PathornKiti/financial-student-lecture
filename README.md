@@ -18,9 +18,9 @@ Notebooks are located in the `notebook/` directory.
 
 ## Environment Setup
 
-This project uses **Python** and can be managed with either `uv` (recommended) or plain `venv + pip`.
+This project uses **Python** and can be managed with either `uv` (recommended) or plain `venv + pip`. A `Makefile` is provided for a one-command setup after cloning.
 
-### Option A: Setup with `uv` (recommended)
+### Option A: Setup with `make` + `uv` (recommended)
 
 1. Install `uv` (if you do not have it):
 
@@ -28,19 +28,37 @@ This project uses **Python** and can be managed with either `uv` (recommended) o
    pip install uv
    ```
 
-2. Create and sync the project environment:
+2. Create the virtual environment and sync project dependencies:
+
+   ```bash
+   make setup
+   ```
+
+3. Start Jupyter Notebook or JupyterLab:
+
+   ```bash
+   make notebook
+   # or
+   make lab
+   ```
+
+   The notebook commands run Jupyter with `jupyterlab`, `notebook`, and `ipykernel` available through `uv`, so a freshly cloned project is ready to open the notebooks.
+
+### Option B: Setup with `uv` manually
+
+1. Create and sync the project environment:
 
    ```bash
    uv sync
    ```
 
-3. Activate the virtual environment:
+2. Activate the virtual environment:
 
    ```bash
    source .venv/bin/activate
    ```
 
-### Option B: Setup with `venv` + `pip`
+### Option C: Setup with `venv` + `pip`
 
 1. Create a virtual environment:
 
@@ -84,9 +102,8 @@ After environment setup and activation:
 ## Quick Start
 
 ```bash
-uv sync
-source .venv/bin/activate
-jupyter notebook
+make setup
+make notebook
 ```
 
 ## Notes
