@@ -10,6 +10,7 @@ This repository includes workshop-style notebooks covering foundational and appl
 - Fixed income securities basics
 - Multi-period binomial models
 - Real-world option pricing with market data (`yfinance`)
+- Equity derivatives in practice: Black-Scholes, the Greeks, delta-hedging, the volatility surface, and option trading strategies
 - Credit risk workshop material
 - Regression analysis in finance
 - Value at Risk (VaR) modeling approaches
@@ -98,6 +99,7 @@ After environment setup and activation:
 3. Select and run any notebook, for example:
    - `notebook/nb_intro_to_fin_eng_test.ipynb`
    - `notebook/nb_real_world_option_pricing_yfinance.ipynb`
+   - `notebook/lecture/nb_equity_derivatives_in_practice_I.ipynb`
 
 ## Quick Start
 
