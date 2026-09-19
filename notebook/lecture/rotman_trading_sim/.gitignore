@@ -1,0 +1,6 @@
+.env
+logs/*.log
+logs/*.out
+eps_override.json
+__pycache__/
+*.pyc

@@ -1,0 +1,7 @@
+# Bots + client (this is all you strictly need on competition day)
+requests>=2.28
+
+# Notebook / analysis only
+pandas>=1.5
+numpy>=1.23
+matplotlib>=3.6
