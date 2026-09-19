@@ -113,8 +113,10 @@ class Market:
 
 class Simulation:
     def __init__(self, case: str, speed: float, seed: int | None,
-                 news_gap: bool = False, noise: float = 1.0, spread: float = 1.0):
+                 news_gap: bool = False, noise: float = 1.0, spread: float = 1.0,
+                 no_api_orders: bool = False):
         random.seed(seed)
+        self.no_api_orders = no_api_orders
         self.news_gap = news_gap
         self.noise = noise           # scales how far ANON pushes price off value
         self.spread = spread         # scales the quoted bid-ask
@@ -365,6 +367,8 @@ class Handler(BaseHTTPRequestHandler):
             want = params.get("status", ["OPEN"])[0]
             return [o for o in sim.orders if o["status"] == want]
         if path == "/orders" and method == "POST":
+            if sim.no_api_orders:
+                raise PermissionError("API order submission has been disabled")
             return sim.place(params)
         if path.startswith("/orders/") and method == "DELETE":
             oid = int(path.rsplit("/", 1)[1])
@@ -390,6 +394,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(self._route(method))
         except FileNotFoundError as exc:
             self._send({"code": "Not Found", "message": str(exc)}, 404)
+        except PermissionError as exc:
+            self._send({"code": "Forbidden", "message": str(exc)}, 403)
         except (KeyError, ValueError) as exc:
             self._send({"code": "Bad Request", "message": str(exc)}, 400)
         except Exception as exc:                                  # noqa: BLE001
@@ -406,6 +412,8 @@ def main() -> None:
     p.add_argument("--port", type=int, default=9999)
     p.add_argument("--speed", type=float, default=1.0, help="ticks per real second")
     p.add_argument("--seed", type=int, default=None)
+    p.add_argument("--no-api-orders", action="store_true",
+                   help="refuse order submission with 403, as a non-ALGO case does")
     p.add_argument("--noise", type=float, default=1.0,
                    help="scale how far ANON pushes price from fair value "
                         "(<1 = a tighter, more competitive market)")
@@ -416,7 +424,7 @@ def main() -> None:
     args = p.parse_args()
 
     Handler.sim = Simulation(args.case, args.speed, args.seed, args.news_gap,
-                             args.noise, args.spread)
+                             args.noise, args.spread, args.no_api_orders)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     print(f"mock RIT [{args.case}] on http://127.0.0.1:{args.port}/v1  "
           f"speed={args.speed}x  ctrl-C to stop")

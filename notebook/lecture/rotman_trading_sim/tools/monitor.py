@@ -13,6 +13,7 @@ no orders, so it is always safe to leave running.
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 import time
 from pathlib import Path
@@ -111,6 +112,47 @@ def fi2_screen(c: RITClient, args) -> None:
         except (ValueError, TypeError, KeyError):
             pass
 
+    # ---- ACTION PANEL: what to click, right now, best opportunity first ----
+    actions = []
+    for ticker in (TB6M, TB12M, BOND):
+        theo = v.theo(ticker)
+        if theo is None or ticker not in secs:
+            continue
+        srow = secs[ticker]
+        bid, ask = srow.get("bid"), srow.get("ask")
+        if bid is None or ask is None:
+            continue
+        try:
+            ob = OrderBook.from_api(c.book(ticker, limit=20), ticker)
+        except RITError:
+            continue
+        buy_edge = theo - ask - BOND_COMMISSION
+        sell_edge = bid - theo - BOND_COMMISSION
+        if buy_edge > args.min_edge:
+            qty = ob.max_qty_for_avg_price("BUY", theo - BOND_COMMISSION - args.min_edge)
+            limit = math.floor((theo - BOND_COMMISSION - args.min_edge) * 100) / 100
+            actions.append((buy_edge * qty, "BUY", ticker, qty, limit, buy_edge))
+        elif sell_edge > args.min_edge:
+            qty = ob.max_qty_for_avg_price("SELL", theo + BOND_COMMISSION + args.min_edge)
+            limit = math.ceil((theo + BOND_COMMISSION + args.min_edge) * 100) / 100
+            actions.append((sell_edge * qty, "SELL", ticker, qty, limit, sell_edge))
+
+    actions.sort(reverse=True)
+    print()
+    if actions:
+        print(f"{BOLD}>>> DO THIS NOW  (best first){RESET}")
+        for value, side, ticker, qty, limit, edge in actions:
+            colr = GREEN if side == "BUY" else RED
+            # Max order size is 1,000 bonds, so say how many clicks it takes.
+            clips = -(-qty // 1000)
+            print(f"  {colr}{BOLD}{side:<4} {ticker:<6} {qty:>5} @ {limit:>8.2f}"
+                  f"{RESET}  edge ${edge:.3f}/bond -> {BOLD}${value:,.0f}{RESET}"
+                  f"  ({clips} order{'s' if clips > 1 else ''} of <=1000)")
+        if args.bell:
+            sys.stdout.write("\a")
+    else:
+        print(f"  {DIM}nothing above ${args.min_edge:.2f} edge - wait{RESET}")
+
     print(f"\nNLV  ${c.trader().get('nlv', 0):,.2f}")
 
 
@@ -179,6 +221,8 @@ def main() -> None:
     p.add_argument("--max-pos", type=int, default=100_000)
     p.add_argument("--interval", type=float, default=0.5)
     p.add_argument("--once", action="store_true", help="render one frame and exit")
+    p.add_argument("--bell", action="store_true",
+                   help="terminal beep whenever a tradable edge appears")
     args = p.parse_args()
 
     c = RITClient()

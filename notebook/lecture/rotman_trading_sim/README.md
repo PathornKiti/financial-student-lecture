@@ -138,6 +138,8 @@ round trip costs $2,000. PI settles at fair value, so a position bought below FV
 already a winner — you do not need to sell it back when the price returns to fair. This
 bot holds and only flips when the price overshoots to the other side.
 
+**Step-by-step for the day: [RUNBOOK_FI2.md](RUNBOOK_FI2.md)**
+
 Detailed playbooks: [STRATEGY_FI2.md](STRATEGY_FI2.md) · [STRATEGY_EV1.md](STRATEGY_EV1.md)
 
 ---

@@ -48,6 +48,24 @@ class RITError(RuntimeError):
     """Any non-2xx response from the RIT API."""
 
 
+class OrdersDisabled(RITError):
+    """
+    HTTP 403 - the server refuses ALL order submission for this case.
+
+    RIT ships with "API Orders" turned OFF for every case except ALGO cases, and
+    the switch lives on the server (visible as a greyed-out "API Orders" icon on
+    the client's bottom bar). No client-side setting changes it: ask the
+    instructor to enable it or to load the case as an ALGO case.
+
+    Reading market data is unaffected, so tools/monitor.py still works fully.
+    """
+
+
+def _is_orders_disabled(text: str) -> bool:
+    low = text.lower()
+    return "order submission" in low and ("disabled" in low or "forbidden" in low)
+
+
 class RateLimited(RITError):
     """HTTP 429. The API tells us how long to wait in the body."""
 
@@ -137,7 +155,10 @@ class RITClient:
                 continue
 
             if r.status_code >= 400:
-                raise RITError(f"{method} {path} -> {r.status_code}: {r.text[:300]}")
+                body = r.text[:300]
+                if r.status_code == 403 and _is_orders_disabled(body):
+                    raise OrdersDisabled(body)
+                raise RITError(f"{method} {path} -> {r.status_code}: {body}")
 
             if not r.content:
                 return None

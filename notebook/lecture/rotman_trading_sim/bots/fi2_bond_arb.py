@@ -43,7 +43,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ritlib import config
-from ritlib.client import RITClient, RITError
+from ritlib.client import OrdersDisabled, RITClient, RITError
 from ritlib.microstructure import OrderBook, plan_execution
 from ritlib.pricing import (
     BOND, BOND_COMMISSION, TB6M, TB12M, TICKS_PER_PERIOD,
@@ -69,6 +69,7 @@ class FI2Bot:
         self.pending: list[int] = []          # marketable-limit ids to clean up
         self.quote_ids: list[int] = []        # resting maker quotes
         self.tick, self.period = 0, 1
+        self.orders_disabled = False      # server refuses order entry for this case
         self.fwd_buy = self.fwd_sell = 0.0
         try:
             self.trader_id = str(client.trader().get("trader_id", "")) or None
@@ -202,6 +203,9 @@ class FI2Bot:
             try:
                 order = self.c.limit_order(ticker, action, chunk, limit)
                 self.pending.append(order["order_id"])
+            except OrdersDisabled:
+                self.orders_disabled = True
+                return
             except RITError as exc:
                 self.log(f"order rejected {ticker} {action} {chunk}: {exc}")
                 return
@@ -280,6 +284,19 @@ class FI2Bot:
                 self.log(f"case error: {exc}")
                 time.sleep(0.5)
                 continue
+            if self.orders_disabled:
+                self.log("!" * 72)
+                self.log("API ORDER SUBMISSION IS DISABLED ON THE SERVER FOR THIS CASE.")
+                self.log("This is not your key, your .env, or this code - reading data works,")
+                self.log("only order entry is refused. The client's bottom-bar 'API Orders'")
+                self.log("icon will be grey. Only the instructor can enable it, or load the")
+                self.log("case as an ALGO case.")
+                self.log("")
+                self.log("Trade manually off the read-only dashboard instead:")
+                self.log("    python tools/monitor.py --case fi2")
+                self.log("!" * 72)
+                return
+
             status = case.get("status")
             if status == "STOPPED":
                 self.log("case STOPPED - shutting down")

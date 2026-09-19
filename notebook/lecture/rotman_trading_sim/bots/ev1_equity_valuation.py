@@ -41,7 +41,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ritlib import config
-from ritlib.client import RITClient, RITError
+from ritlib.client import OrdersDisabled, RITClient, RITError
 from ritlib.microstructure import Level, OrderBook, Tape, plan_execution
 from ritlib.news import apply_news, load_overrides
 from ritlib.pricing import COMP_PE, EPSBook, EV1_FEE, EV1_TICKER
@@ -59,6 +59,7 @@ class EV1Bot:
         self.last_news_id = 0             # so we only pull NEW news
         self.sent_delta = 0               # fills not yet visible in the API position
         self.has_resting = False          # did we leave orders in the book?
+        self.orders_disabled = False      # server refuses order entry for this case
         try:
             self.trader_id = str(client.trader().get("trader_id", "")) or None
         except RITError:
@@ -231,6 +232,9 @@ class EV1Bot:
                 self.c.limit_order(EV1_TICKER, side, chunk, worst_avg)
                 self.sent_delta += chunk if side == "BUY" else -chunk
                 self.has_resting = True
+            except OrdersDisabled:
+                self.orders_disabled = True
+                return
             except RITError as exc:
                 self.log(f"order rejected: {exc}")
                 return
@@ -287,6 +291,19 @@ class EV1Bot:
                 self.refresh_valuation()
                 fv = self.book.fair_value
                 self.fv_changed_this_loop = abs(fv - prev_fv) > 1e-9
+
+                if self.orders_disabled:
+                    self.log("!" * 72)
+                    self.log("API ORDER SUBMISSION IS DISABLED ON THE SERVER FOR THIS CASE.")
+                    self.log("This is not your key, your .env, or this code - reading data works,")
+                    self.log("only order entry is refused. The client's bottom-bar 'API Orders'")
+                    self.log("icon will be grey. Only the instructor can enable it, or load the")
+                    self.log("case as an ALGO case.")
+                    self.log("")
+                    self.log("Trade manually off the read-only dashboard instead:")
+                    self.log("    python tools/monitor.py --case ev1")
+                    self.log("!" * 72)
+                    return
 
                 if self.halted:
                     try:
