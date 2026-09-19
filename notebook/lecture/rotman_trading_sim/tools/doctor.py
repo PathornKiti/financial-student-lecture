@@ -33,7 +33,78 @@ def check(label: str, status: str, detail: str = "", fix: str = "") -> None:
         problems.append(f"{label}: {fix}")
 
 
+def probe() -> int:
+    """
+    Which RIT API can this machine actually reach?
+
+    RIT exposes two, and in a lab the firewall usually opens only some ports:
+      Client API  localhost:9999   - needs the Windows RIT Client running here
+      DMA API     <server>:<port>  - needs no client, but is often restricted
+                                     to the lab network
+    """
+    import socket
+    from urllib.parse import urlparse
+
+    print(f"\n{BOLD}Endpoint probe{RESET}\n" + "=" * 62)
+    targets = [("Client API", config.client_url(), "X-API-Key")]
+    if config.dma_url():
+        targets.append(("DMA API", config.dma_url(), "Basic (login ID + password)"))
+
+    reachable = []
+    for name, url, auth in targets:
+        parsed = urlparse(url)
+        host, port = parsed.hostname, parsed.port or 80
+        sock = socket.socket()
+        sock.settimeout(5)
+        try:
+            sock.connect((host, port))
+            tcp = True
+        except Exception as exc:
+            tcp, err = False, f"{type(exc).__name__}"
+        finally:
+            sock.close()
+
+        if not tcp:
+            check(f"{name}  {url}", BAD, f"TCP unreachable ({err})")
+            continue
+        try:
+            c = RITClient(base_url=url)
+            case = c.case()
+            check(f"{name}  {url}", OK,
+                  f"LIVE - {case.get('name')} {case.get('status')} | auth: {auth}")
+            reachable.append((name, url))
+        except RITError as exc:
+            msg = str(exc)
+            if "401" in msg or "403" in msg:
+                check(f"{name}  {url}", WARN, f"reachable but AUTH REJECTED - needs {auth}")
+                reachable.append((name, url))
+            else:
+                check(f"{name}  {url}", BAD, f"TCP open but not speaking the API: {msg[:70]}")
+
+    print("=" * 62)
+    if not reachable:
+        print(f"\n{BOLD}Neither endpoint is reachable.{RESET}")
+        print("  - Client API: is the Windows RIT Client running on THIS machine?")
+        print("  - DMA API: are you on the lab network? Check the port under the")
+        print("    client's 'API' icon.\n")
+        return 1
+    print(f"\n{BOLD}Use this one:{RESET}")
+    name, url = reachable[0]
+    print(f"  {name} -> {url}")
+    if name == "DMA API":
+        print(f"  Put in .env:  RIT_URL={url}")
+        print( "                RIT_TRADER_ID / RIT_PASSWORD = your RIT login")
+        print( "                RIT_MIN_INTERVAL=0.1   (DMA rate-limits harder)")
+    else:
+        print( "  Put in .env:  RIT_API_KEY = the key under the client's 'API' icon")
+        print( "                (leave RIT_URL commented out)")
+    print()
+    return 0
+
+
 def main() -> int:
+    if "--probe" in sys.argv:
+        return probe()
     print(f"\n{BOLD}RIT setup check{RESET}\n" + "=" * 62)
 
     # 1 ---------------------------------------------------------------- .env
@@ -48,10 +119,18 @@ def main() -> int:
 
     # 2 ------------------------------------------------------------ API key
     key = config.api_key()
-    if not key:
+    tid = config.trader_id()
+    if tid:
+        check("DMA Basic auth", OK, f"trader_id={tid} "
+              f"password={'set' if config.password() else 'EMPTY'}")
+        print(f"         {DIM}-> using the DMA REST API (server-hosted). Make sure "
+              f"RIT_URL points at the DMA port, not the client's 9999.{RESET}")
+    if not key and not tid:
         check("API key", BAD, "RIT_API_KEY is empty",
-              "RIT client -> File -> Preferences -> API -> tick 'Enable REST API', "
-              "set a key, paste the same string into .env")
+              "in the RIT client click the 'API' icon on the BOTTOM BAR, read the "
+              "key there, paste it into .env")
+    elif not key:
+        check("API key", OK, "not set - not needed when using DMA Basic auth")
     elif len(key) < 4:
         check("API key", WARN, f"only {len(key)} characters",
               "make sure this matches the key in the RIT client exactly")
@@ -72,8 +151,15 @@ def main() -> int:
                   "or the port is wrong. On macOS the real client cannot run at all - "
                   "use: python mock/mock_rit_server.py --case fi2")
         elif "401" in msg or "403" in msg:
-            check("RIT API reachable", BAD, "authentication rejected",
-                  "RIT_API_KEY in .env does not match the key in the RIT client")
+            if config.trader_id():
+                fix = ("DMA API: RIT_TRADER_ID / RIT_PASSWORD must be your RIT "
+                       "LOGIN credentials, not an API key")
+            else:
+                fix = ("Client API: RIT_API_KEY must match the key shown under the "
+                       "client's 'API' icon. If you are pointing at the SERVER's DMA "
+                       "port instead, set RIT_TRADER_ID / RIT_PASSWORD - DMA uses "
+                       "HTTP Basic with your login, not an API key")
+            check("RIT API reachable", BAD, "authentication rejected (401/403)", fix)
         else:
             check("RIT API reachable", BAD, msg[:120], "see the error above")
         print(f"\n{BOLD}Stopped: cannot reach the API.{RESET}\n")

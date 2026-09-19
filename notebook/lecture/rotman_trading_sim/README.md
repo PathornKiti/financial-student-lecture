@@ -60,8 +60,9 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-In the RIT client: **File → Preferences → API** → tick *Enable REST API* (and *Enable
-API Orders* to send orders), set a key, note the port. Put that key in `.env`:
+In the RIT client, the API controls are on the **bottom bar**, not in a menu. Click the
+**API** icon (bottom-right, next to *RTD* and *API Orders*) to open the settings and the
+key. Put that key in `.env`:
 
 ```ini
 RIT_API_KEY=your-key-here

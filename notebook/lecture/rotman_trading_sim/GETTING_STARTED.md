@@ -101,11 +101,31 @@ cp .env.example .env
 
 Open `.env` and fill in **one line**: `RIT_API_KEY=`.
 
-To get that key, in the RIT client: **File → Preferences → API**
-1. tick **Enable REST API**
-2. tick **Enable API Orders** (needed to *send* orders; leave off if you only read)
-3. type any string into the API key box
-4. paste the same string into `.env`
+To get that key: the RIT client's API controls live on the **bottom bar**, bottom-right.
+Click the **API** icon to open the settings and read or set the key, then paste it
+into `.env`.
+
+### Check the three API icons before you do anything else
+
+The bottom bar shows three icons. **Green = active, grey = off, red = error.**
+
+| Icon | Controls |
+|---|---|
+| **API** | reading market data |
+| **RTD** | Excel real-time data |
+| **API Orders** | **submitting orders from outside the client** |
+
+Per Rotman's Client Software Feature Guide: *"By default, both the API and RTD features
+are enabled and the **API Orders feature is turned off** for all RIT Cases available from
+RIT Server except for ALGO Cases."*
+
+So **order submission is granted by the case/server, not by you** — there is no box you
+can tick. If **API Orders** is grey, the bots can read everything and trade nothing; use
+`tools/monitor.py` and trade by hand. Confirm with your instructor whether your cases are
+loaded as ALGO cases.
+
+Two other useful modules: **Help Files** has the authoritative *REST API
+Documentation.pdf*, and **Case Files** has the case briefs and support files.
 
 Then:
 

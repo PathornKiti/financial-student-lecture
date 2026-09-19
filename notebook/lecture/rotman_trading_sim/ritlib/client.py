@@ -3,9 +3,27 @@ Thin, defensive wrapper around the RIT (Rotman Interactive Trader) REST API v1.
 
 The RIT client application exposes a local REST server, by default at
     http://localhost:9999/v1
-Authentication is a single API key sent in the `X-API-key` header. You create
-the key inside the RIT client: File -> Preferences -> API (tick "Enable REST
-API", set a key, note the port).
+RIT exposes TWO REST APIs, and they authenticate DIFFERENTLY:
+
+  1. CLIENT REST API - served by the RIT Client on your own machine
+     (http://localhost:9999/v1). Authenticate with the API key you read from the
+     client's "API" icon on the bottom bar, sent in the `X-API-Key` header.
+
+  2. DMA REST API - served by the RIT Instructor App (the SERVER), directly.
+     Same hostname you log the client into, but a DIFFERENT port (the official
+     docs use 10001 as their example). Authenticate with HTTP BASIC auth using
+     your LOGIN TRADER ID AND PASSWORD - not an API key:
+         Authorization: Basic base64("traderID:password")
+
+This class sends whichever credentials you configure, and will send both at once
+if you configure both - the two use different headers, so there is no conflict
+and the server simply honours the one it checks. That means the same code works
+against either API without a mode switch.
+
+Note on permissions: the bottom bar's "API Orders" icon is the right to SUBMIT
+orders, and per Rotman's feature guide it is OFF by default for every case except
+ALGO cases. It is granted by the server, not by you - if it is grey, every order
+will be rejected and you can only read.
 
 Every method returns plain Python dicts/lists straight from the API so that you
 can print them and sanity-check field names on the competition machine. Field
@@ -43,6 +61,8 @@ class RITClient:
         self,
         api_key: str | None = None,
         base_url: str | None = None,
+        trader_id: str | None = None,
+        password: str | None = None,
         timeout: float = 5.0,
         max_retries: int = 3,
         min_interval: float | None = None,
@@ -57,10 +77,27 @@ class RITClient:
         # RIT_MIN_INTERVAL=0.2 in .env if you start seeing 429s.
         self.min_interval = (config.setting("RIT_MIN_INTERVAL", 0.0, float)
                              if min_interval is None else min_interval)
+        self.trader_id = trader_id if trader_id is not None else config.trader_id()
+        self.password = password if password is not None else config.password()
         self._last_call = 0.0
         self._lock = threading.Lock()
         self.session = requests.Session()
-        self.session.headers.update({"X-API-key": self.api_key})
+        # Documented casing is X-API-Key. Header names are case-insensitive per
+        # RFC 7230, but matching the spec exactly costs nothing.
+        if self.api_key:
+            self.session.headers.update({"X-API-Key": self.api_key})
+        if self.trader_id:
+            # HTTP Basic, for the DMA REST API. requests builds the header.
+            self.session.auth = (self.trader_id, self.password or "")
+
+    @property
+    def auth_mode(self) -> str:
+        modes = []
+        if self.api_key:
+            modes.append("X-API-Key")
+        if self.trader_id:
+            modes.append(f"Basic({self.trader_id})")
+        return " + ".join(modes) or "NONE"
 
     # ---------------------------------------------------------------- plumbing
     def _request(self, method: str, path: str, **params) -> Any:
@@ -83,10 +120,18 @@ class RITClient:
                 continue
 
             if r.status_code == 429:
+                # Spec: a 429 carries BOTH a Retry-After header and a `wait` body
+                # field. Per-security limits can be stricter than the global one,
+                # so honour whichever value is larger.
+                wait = 0.5
                 try:
-                    wait = float(r.json().get("wait", 0.5))
+                    wait = float(r.json().get("wait", wait))
                 except Exception:
-                    wait = 0.5
+                    pass
+                try:
+                    wait = max(wait, float(r.headers.get("Retry-After", 0)))
+                except (TypeError, ValueError):
+                    pass
                 time.sleep(min(wait, 2.0))
                 last_exc = RateLimited(wait)
                 continue

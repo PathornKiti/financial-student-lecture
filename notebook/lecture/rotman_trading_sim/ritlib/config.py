@@ -67,6 +67,30 @@ def api_key() -> str:
     return _get("RIT_API_KEY")
 
 
+def trader_id() -> str:
+    """DMA REST API only: your RIT login trader ID (used for HTTP Basic auth)."""
+    return _get("RIT_TRADER_ID")
+
+
+def password() -> str:
+    """DMA REST API only: your RIT login password."""
+    return _get("RIT_PASSWORD")
+
+
+def dma_url() -> str:
+    """The DMA REST API endpoint, if configured. Not used unless RIT_URL points at it."""
+    return _get("RIT_DMA_URL").rstrip("/")
+
+
+def client_url() -> str:
+    """The Client REST API endpoint built from RIT_HOST/RIT_PORT, ignoring RIT_URL."""
+    host = _get("RIT_HOST", "localhost").strip("/")
+    port = _get("RIT_PORT", "9999")
+    if "://" in host:
+        _, _, host = host.partition("://")
+    return f"http://{host}:{port}/v1"
+
+
 def base_url() -> str:
     """
     Build the API base URL. Set RIT_URL directly for anything unusual;
@@ -105,4 +129,7 @@ def setting(key: str, default, cast=None):
 def describe() -> str:
     key = api_key()
     masked = f"{key[:4]}…{key[-2:]} ({len(key)} chars)" if len(key) > 6 else ("SET" if key else "MISSING")
-    return f"url={base_url()}  api_key={masked}  env_file={'found' if ENV_PATH.exists() else 'MISSING'}"
+    auth = f"api_key={masked}"
+    if trader_id():
+        auth += f"  basic={trader_id()}:{'*' * len(password()) or 'EMPTY'}"
+    return f"url={base_url()}  {auth}  env_file={'found' if ENV_PATH.exists() else 'MISSING'}"
