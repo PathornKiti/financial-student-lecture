@@ -75,7 +75,8 @@ class Market:
             asks.append({"order_id": 95000 + i, "trader_id": "ANON", "ticker": self.ticker,
                          "price": ask, "quantity": qty, "quantity_filled": 0,
                          "action": "SELL", "status": "OPEN"})
-        return {"bids": bids, "asks": asks}
+        # Match the live API exactly: singular keys.
+        return {"bid": bids, "ask": asks}
 
     def best(self) -> tuple[float, float]:
         half = self.spread / 2
@@ -83,7 +84,7 @@ class Market:
 
     def fill(self, action: str, qty: int, limit: float | None) -> tuple[int, float]:
         """Walk the simulated book. Returns (filled_qty, average_price)."""
-        levels = self.book(20)["asks" if action == "BUY" else "bids"]
+        levels = self.book(20)["ask" if action == "BUY" else "bid"]
         filled, notional = 0, 0.0
         for lvl in levels:
             if filled >= qty:

@@ -104,10 +104,20 @@ class OrderBook:
             levels.sort(key=lambda l: l.price, reverse=reverse)
             return levels
 
+        # The live RIT Client REST API returns SINGULAR keys - {"bid": [...],
+        # "ask": [...]} - per its OpenAPI spec. Accept the plural spelling too so
+        # this works against either shape; reading the wrong key silently yields
+        # an empty book, which looks like "no liquidity" and stops all trading.
+        raw_bids = payload.get("bid")
+        if raw_bids is None:
+            raw_bids = payload.get("bids")
+        raw_asks = payload.get("ask")
+        if raw_asks is None:
+            raw_asks = payload.get("asks")
         return cls(
             ticker=ticker or payload.get("ticker", ""),
-            bids=build(payload.get("bids"), reverse=True),    # highest first
-            asks=build(payload.get("asks"), reverse=False),   # lowest first
+            bids=build(raw_bids, reverse=True),     # highest first
+            asks=build(raw_asks, reverse=False),    # lowest first
         )
 
     # ------------------------------------------------------------- top of book
