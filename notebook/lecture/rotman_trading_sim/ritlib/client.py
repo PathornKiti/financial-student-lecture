@@ -81,7 +81,7 @@ class RITClient:
         base_url: str | None = None,
         trader_id: str | None = None,
         password: str | None = None,
-        timeout: float = 5.0,
+        timeout: float = 3.0,
         max_retries: int = 3,
         min_interval: float | None = None,
     ):
@@ -164,7 +164,26 @@ class RITClient:
                 return None
             return r.json()
 
-        raise RITError(f"{method} {path} failed after {self.max_retries} attempts: {last_exc}")
+        # Make the failure self-diagnosing: the single most common setup mistake
+        # is pointing at the wrong endpoint, and the two failure modes look
+        # different in a way that tells you which mistake you made.
+        hint = ""
+        if isinstance(last_exc, requests.Timeout) or "timed out" in str(last_exc).lower():
+            hint = (f"\n  TIMED OUT reaching {self.base_url}\n"
+                    "  A timeout means a remote host that is not answering - usually a\n"
+                    "  firewalled DMA port. localhost refuses instantly instead.\n"
+                    "  FIX: comment out RIT_URL in .env so it falls back to\n"
+                    f"       RIT_HOST/RIT_PORT ({config.client_url()}), and make sure the\n"
+                    "       RIT Client is running ON THIS MACHINE.")
+        elif isinstance(last_exc, requests.ConnectionError):
+            hint = (f"\n  CONNECTION REFUSED at {self.base_url}\n"
+                    "  Nothing is listening. The RIT Client is not running on this\n"
+                    "  machine, or its REST API is off, or the port is wrong.\n"
+                    "  FIX: start the client and check the port under its 'API' icon.\n"
+                    "       No client available? python mock/mock_rit_server.py --case fi2")
+        raise RITError(
+            f"{method} {self.base_url}{path} failed after {self.max_retries} "
+            f"attempts: {last_exc}{hint}")
 
     def get(self, path: str, **params) -> Any:
         return self._request("GET", path, **params)
